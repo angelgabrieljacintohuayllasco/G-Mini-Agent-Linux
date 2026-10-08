@@ -1,0 +1,23 @@
+# Salidas y directorios de trabajo de los scripts de build
+/out/
+/work/
+/upstream/
+
+# Artefactos sueltos
+*.AppImage
+*.deb
+*.rpm
+*.iso
+*.pkg.tar.zst
+
+# Node y Python
+node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+
+# makepkg dentro de aur/
+/aur/src/
+/aur/pkg/
+/aur/*.AppImage
+/aur/*.log

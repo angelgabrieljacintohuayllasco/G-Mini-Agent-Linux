@@ -1,0 +1,11 @@
+extends: default
+
+rules:
+  # Los workflows de GitHub no usan "---" y su clave "on" no es un booleano.
+  document-start: disable
+  truthy:
+    allowed-values: ["true", "false"]
+    check-keys: false
+  # Las órdenes de shell de los workflows se leen mejor en una línea.
+  line-length:
+    max: 180

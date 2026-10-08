@@ -1,0 +1,10 @@
+# Todo el texto con fin de línea LF, también al trabajar desde Windows:
+# los scripts y los perfiles de las ISO se ejecutan en Linux.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.gz binary
+*.zst binary
+*.AppImage binary

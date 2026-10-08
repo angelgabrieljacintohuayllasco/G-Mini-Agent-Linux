@@ -1,0 +1,115 @@
+# Paquetes de la sesión live de G-Mini OS (Debian). Se instalan sin
+# "Recommends" (auto/config), así que cada componente se pide explícitamente.
+
+# Sistema live y localización
+live-boot
+live-config
+live-config-systemd
+user-setup
+sudo
+locales
+console-setup
+keyboard-configuration
+tzdata
+systemd-zram-generator
+systemd-timesyncd
+dbus-user-session
+polkitd
+pkexec
+udisks2
+upower
+pciutils
+usbutils
+
+# Servidor gráfico
+xserver-xorg-core
+xserver-xorg-input-libinput
+xserver-xorg-video-all
+x11-xserver-utils
+xauth
+x11-xkb-utils
+libgl1-mesa-dri
+
+# Escritorio XFCE
+xfce4-session
+xfwm4
+xfce4-panel
+xfdesktop4
+xfce4-settings
+xfconf
+thunar
+thunar-volman
+gvfs
+xfce4-terminal
+xfce4-appfinder
+xfce4-notifyd
+xfce4-power-manager
+xfce4-power-manager-plugins
+xfce4-pulseaudio-plugin
+xfce4-whiskermenu-plugin
+xfce4-xkb-plugin
+xfce4-screenshooter
+xfce4-taskmanager
+mousepad
+lightdm
+lightdm-gtk-greeter
+accountsservice
+lxpolkit
+xdg-user-dirs
+xdg-utils
+libnotify-bin
+papirus-icon-theme
+adwaita-icon-theme
+fonts-noto-core
+fonts-noto-mono
+fonts-noto-color-emoji
+fonts-liberation2
+
+# Red, audio y Bluetooth
+network-manager
+wpasupplicant
+wireless-regdb
+network-manager-gnome
+pipewire
+pipewire-pulse
+pipewire-alsa
+wireplumber
+pavucontrol
+alsa-utils
+alsa-ucm-conf
+bluez
+blueman
+
+# Máquinas virtuales
+spice-vdagent
+qemu-guest-agent
+
+# G-Mini Agent: el .deb se añade desde config/packages.chroot. El primer
+# arranque compila evdev (pynput) y el OCR usa Tesseract.
+gcc
+libc6-dev
+tesseract-ocr
+tesseract-ocr-spa
+tesseract-ocr-eng
+gnome-keyring
+libpam-gnome-keyring
+libsecret-1-0
+
+# Bienvenida e instalador
+python3
+python3-gi
+gir1.2-gtk-3.0
+calamares
+calamares-settings-debian
+
+# Utilidades
+chromium
+chromium-l10n
+curl
+ca-certificates
+git
+htop
+unzip
+nano
+less
+bash-completion

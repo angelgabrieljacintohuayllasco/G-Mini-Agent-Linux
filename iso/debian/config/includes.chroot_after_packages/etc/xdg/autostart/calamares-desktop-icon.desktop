@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Calamares desktop icon
+Comment=G-Mini OS adds its own "Install G-Mini OS" shortcut instead
+Exec=add-calamares-desktop-icon
+Hidden=true

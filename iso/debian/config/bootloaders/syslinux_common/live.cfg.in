@@ -1,0 +1,18 @@
+label live-@FLAVOUR@
+	menu label ^G-Mini OS
+	menu default
+	linux @LINUX@
+	initrd @INITRD@
+	append @APPEND_LIVE@
+
+label live-@FLAVOUR@-english
+	menu label G-Mini OS (^English)
+	linux @LINUX@
+	initrd @INITRD@
+	append @APPEND_LIVE@ locales=en_US.UTF-8 keyboard-layouts=us,latam
+
+label live-@FLAVOUR@-failsafe
+	menu label G-Mini OS (modo seguro / safe graphics)
+	linux @LINUX@
+	initrd @INITRD@
+	append @APPEND_LIVE_FAILSAFE@

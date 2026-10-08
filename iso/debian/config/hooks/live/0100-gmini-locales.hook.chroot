@@ -1,0 +1,10 @@
+#!/bin/sh
+# Locales de G-Mini OS dentro de la imagen: es_PE (por defecto), es_ES y
+# en_US, para cambiar de idioma sin conexión (gmini-lang y menú de arranque).
+set -e
+
+for locale in es_PE es_ES en_US; do
+    sed -i -E "s/^# *(${locale}\.UTF-8 UTF-8)/\1/" /etc/locale.gen
+done
+locale-gen
+update-locale LANG=es_PE.UTF-8

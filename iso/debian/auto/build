@@ -1,0 +1,4 @@
+#!/bin/bash
+# Build de la ISO; el registro completo queda en build.log.
+set -eo pipefail
+lb build noauto "${@}" 2>&1 | tee build.log

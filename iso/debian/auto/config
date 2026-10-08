@@ -1,0 +1,35 @@
+#!/bin/sh
+# Configuración de live-build para G-Mini OS, edición Debian 13 ("trixie").
+# La ejecuta "lb config" (desde scripts/build-iso-debian.sh).
+set -e
+
+: "${GMINI_OS_VERSION:=dev}"
+
+# Parámetros de arranque comunes: usuario gmini, español (Perú), teclado
+# latinoamericano + estadounidense (Alt+Mayús) y hora de Lima.
+GMINI_BOOT="boot=live components username=gmini user-fullname=G-Mini hostname=g-mini-os locales=es_PE.UTF-8 keyboard-layouts=latam,us keyboard-options=grp:alt_shift_toggle timezone=America/Lima"
+
+lb config noauto \
+    --mode debian \
+    --distribution trixie \
+    --architecture amd64 \
+    --archive-areas "main contrib non-free non-free-firmware" \
+    --security true \
+    --updates true \
+    --binary-image iso-hybrid \
+    --bootloaders "syslinux,grub-efi" \
+    --debian-installer none \
+    --linux-flavours amd64 \
+    --firmware-chroot true \
+    --firmware-binary false \
+    --apt-recommends false \
+    --memtest memtest86+ \
+    --chroot-squashfs-compression-type xz \
+    --cache-packages false \
+    --image-name "g-mini-os-debian-${GMINI_OS_VERSION}" \
+    --iso-application "G-Mini OS" \
+    --iso-publisher "G-Mini Agent; https://github.com/angelgabrieljacintohuayllasco/G-Mini-Agent" \
+    --iso-volume "G-Mini OS ${GMINI_OS_VERSION}" \
+    --bootappend-live "${GMINI_BOOT} quiet" \
+    --bootappend-live-failsafe "${GMINI_BOOT} nomodeset" \
+    "${@}"

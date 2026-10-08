@@ -1,0 +1,8 @@
+#!/bin/sh
+# Instala G-Mini OS (edición Debian) en el disco con Calamares, que copia
+# este mismo sistema, G-Mini Agent incluido.
+set -eu
+if [ -x /usr/bin/calamares-install-debian ]; then
+    exec /usr/bin/calamares-install-debian "$@"
+fi
+exec pkexec calamares "$@"

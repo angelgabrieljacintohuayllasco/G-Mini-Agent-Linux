@@ -1,0 +1,22 @@
+#!/bin/sh
+# Ajustes del escritorio para usuarios nuevos (también en el sistema que
+# instala Calamares).
+set -e
+
+# LightDM como gestor de sesiones y XFCE como sesión por defecto.
+echo /usr/sbin/lightdm >/etc/X11/default-display-manager
+mkdir -p /etc/lightdm/lightdm.conf.d
+cat >/etc/lightdm/lightdm.conf.d/50-gmini.conf <<'CONF'
+[Seat:*]
+greeter-session=lightdm-gtk-greeter
+user-session=xfce
+CONF
+
+# El panel de G-Mini OS también como panel por defecto de XFCE.
+install -Dm644 /etc/skel/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml \
+    /etc/xdg/xfce4/panel/default.xml
+
+# Iconos propios de /usr/local en la caché de iconos.
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -q -t -f /usr/local/share/icons/hicolor || true
+fi

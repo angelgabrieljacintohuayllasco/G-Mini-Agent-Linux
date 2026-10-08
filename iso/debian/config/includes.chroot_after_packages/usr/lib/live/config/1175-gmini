@@ -1,0 +1,80 @@
+#!/bin/sh
+## live-config(7) - G-Mini OS: ajustes que solo existen en la sesión live.
+##
+## Corre al arrancar, después de user-setup (0030) y lightdm (0100). Lo que
+## crea no está en la imagen squashfs, así que Calamares no lo copia al
+## sistema instalado.
+
+# shellcheck source=/dev/null
+. /usr/lib/live/config.sh
+
+Cmdline ()
+{
+	for _PARAMETER in ${LIVE_CONFIG_CMDLINE}
+	do
+		case "${_PARAMETER}" in
+			live-config.username=*|username=*)
+				LIVE_USERNAME="${_PARAMETER#*username=}"
+				;;
+		esac
+	done
+}
+
+Init ()
+{
+	if component_was_executed "gmini"
+	then
+		exit 0
+	fi
+
+	printf ' gmini'
+}
+
+Config ()
+{
+	_USER="${LIVE_USERNAME:-user}"
+	_HOME="/home/${_USER}"
+
+	# Contraseña documentada de la sesión live (live-config usa "live").
+	echo "${_USER}:gmini" | chpasswd
+
+	# Llavero sin contraseña: con entrada automática no hay contraseña que lo
+	# desbloquee, y en la sesión live todo se borra al apagar.
+	if [ -d "${_HOME}" ] && [ ! -e "${_HOME}/.local/share/keyrings/login.keyring" ]
+	then
+		install -d -m 0700 -o "${_USER}" -g "${_USER}" "${_HOME}/.local" "${_HOME}/.local/share" "${_HOME}/.local/share/keyrings"
+		cat > "${_HOME}/.local/share/keyrings/login.keyring" << KEYRING
+[keyring]
+display-name=Login
+ctime=0
+mtime=0
+lock-on-idle=false
+lock-after=false
+KEYRING
+		printf 'login' > "${_HOME}/.local/share/keyrings/default"
+		chown "${_USER}:${_USER}" "${_HOME}/.local/share/keyrings/login.keyring" "${_HOME}/.local/share/keyrings/default"
+		chmod 0600 "${_HOME}/.local/share/keyrings/login.keyring" "${_HOME}/.local/share/keyrings/default"
+	fi
+
+	# Acceso "Instalar G-Mini OS" (solo tiene sentido en la sesión live).
+	mkdir -p /usr/local/share/applications
+	cat > /usr/local/share/applications/gmini-install.desktop << DESKTOP
+[Desktop Entry]
+Type=Application
+Name=Install G-Mini OS
+Name[es]=Instalar G-Mini OS
+Comment=Install G-Mini OS (Debian) to disk with Calamares
+Comment[es]=Instala G-Mini OS (Debian) en el disco con Calamares
+Exec=gmini-install
+Icon=gmini-os
+Terminal=false
+Categories=System;
+DESKTOP
+
+	# Creating state file
+	touch /var/lib/live/config/gmini
+}
+
+Cmdline
+Init
+Config

@@ -1,0 +1,9 @@
+# De releng: llavero de pacman en RAM, se inicializa en cada arranque.
+[Unit]
+Description=Temporary /etc/pacman.d/gnupg directory
+
+[Mount]
+What=tmpfs
+Where=/etc/pacman.d/gnupg
+Type=tmpfs
+Options=mode=0755,noswap

@@ -1,0 +1,19 @@
+# remove from airootfs!
+# Habilita los servicios de la sesión live como lo haría "systemctl enable" en
+# un sistema instalado (crea los enlaces, incluido display-manager.service).
+
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = lightdm
+Target = networkmanager
+Target = bluez
+Target = virtualbox-guest-utils
+Target = spice-vdagent
+
+[Action]
+Description = Habilitando los servicios de G-Mini OS...
+When = PostTransaction
+Depends = systemd
+Exec = /usr/bin/systemctl enable lightdm.service NetworkManager.service bluetooth.service systemd-timesyncd.service vboxservice.service spice-vdagentd.socket pacman-init.service gmini-boot-lang.service

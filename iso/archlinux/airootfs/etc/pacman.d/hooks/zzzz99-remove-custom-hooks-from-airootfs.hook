@@ -1,0 +1,18 @@
+# remove from airootfs!
+# De releng: borra los hooks propios del build para que no se ejecuten si se
+# usa pacstrap desde la sesión live (FS#49347).
+
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Operation = Remove
+Type = Package
+Target = *
+
+[Action]
+Description = Quitando los hooks que solo sirven durante el build de la ISO...
+When = PostTransaction
+Depends = sh
+Depends = coreutils
+Depends = grep
+Exec = /bin/sh -c "rm -- $(grep -Frl 'remove from airootfs' /etc/pacman.d/hooks/)"

@@ -1,0 +1,14 @@
+# remove from airootfs!
+# Genera durante el build los locales de /etc/locale.gen (es_PE, es_ES, en_US).
+
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = glibc
+
+[Action]
+Description = Generando los locales de G-Mini OS...
+When = PostTransaction
+Depends = glibc
+Exec = /usr/bin/locale-gen

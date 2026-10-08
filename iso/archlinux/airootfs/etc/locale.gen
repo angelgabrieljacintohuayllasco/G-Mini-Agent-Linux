@@ -1,0 +1,5 @@
+# Locales de G-Mini OS. es_PE es el idioma por defecto; en_US se usa con la
+# entrada "G-Mini OS (English)" o gmini-lang en.
+es_PE.UTF-8 UTF-8
+es_ES.UTF-8 UTF-8
+en_US.UTF-8 UTF-8

@@ -1,0 +1,25 @@
+# Paquetes que gmini-install pide a archinstall además del perfil Desktop >
+# Xfce4 (xfce4, xfce4-goodies, pavucontrol, gvfs, xarchiver). Reproducen el
+# escritorio de la sesión live; las dependencias de G-Mini Agent llegan con su
+# paquete.
+accountsservice
+blueman
+chromium
+gnome-keyring
+libsecret
+mousepad
+network-manager-applet
+nm-connection-editor
+noto-fonts
+noto-fonts-emoji
+papirus-icon-theme
+polkit-gnome
+python-gobject
+tesseract
+tesseract-data-eng
+tesseract-data-spa
+ttf-liberation
+xdg-user-dirs
+xfce4-pulseaudio-plugin
+xfce4-whiskermenu-plugin
+xfce4-xkb-plugin

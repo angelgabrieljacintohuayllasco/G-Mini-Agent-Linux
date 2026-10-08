@@ -1,0 +1,15 @@
+# remove from airootfs!
+# Zona horaria por defecto: America/Lima. Se crea aquí porque el perfil se
+# mantiene sin enlaces simbólicos (se edita también desde Windows).
+
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = tzdata
+
+[Action]
+Description = Configurando la zona horaria America/Lima...
+When = PostTransaction
+Depends = coreutils
+Exec = /usr/bin/ln -sf ../usr/share/zoneinfo/America/Lima /etc/localtime

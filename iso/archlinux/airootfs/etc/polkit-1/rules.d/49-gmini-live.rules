@@ -1,0 +1,6 @@
+// Solo en la sesión live: los administradores no repiten la contraseña.
+polkit.addRule(function (action, subject) {
+    if (subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+});

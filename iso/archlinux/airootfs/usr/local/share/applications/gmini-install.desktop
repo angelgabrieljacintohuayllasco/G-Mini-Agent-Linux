@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Install G-Mini OS
+Name[es]=Instalar G-Mini OS
+Comment=Install G-Mini OS (Arch Linux) to disk with archinstall
+Comment[es]=Instala G-Mini OS (Arch Linux) en el disco con archinstall
+Exec=gmini-install
+Icon=gmini-os
+Terminal=false
+Categories=System;
+Keywords=install;installer;archinstall;instalar;

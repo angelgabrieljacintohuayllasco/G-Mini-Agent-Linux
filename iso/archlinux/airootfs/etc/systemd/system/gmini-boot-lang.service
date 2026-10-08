@@ -1,0 +1,16 @@
+# Aplica el idioma elegido en el menú de arranque (gmini.lang=en) antes de
+# que arranquen LightDM y AccountsService.
+[Unit]
+Description=G-Mini OS: idioma elegido en el menú de arranque
+ConditionKernelCommandLine=gmini.lang
+DefaultDependencies=no
+After=local-fs.target systemd-sysusers.service systemd-tmpfiles-setup.service
+Before=display-manager.service lightdm.service accounts-daemon.service systemd-user-sessions.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/gmini-lang --boot
+
+[Install]
+WantedBy=multi-user.target

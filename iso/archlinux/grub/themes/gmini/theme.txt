@@ -1,0 +1,50 @@
+# Tema de GRUB de G-Mini OS. El fondo se recorta al centro ("crop") para no
+# deformarse en pantallas 4:3; logo y título quedan en la franja central.
+title-text: ""
+desktop-image: "background.png"
+desktop-image-scale-method: "crop"
+desktop-color: "#0b1220"
+terminal-font: "Unifont Regular 16"
+terminal-left: "10%"
+terminal-top: "45%"
+terminal-width: "80%"
+terminal-height: "45%"
+
++ boot_menu {
+    left = 25%
+    top = 45%
+    width = 50%
+    height = 36%
+    item_font = "Unifont Regular 16"
+    item_color = "#a9b5d9"
+    selected_item_color = "#ffffff"
+    item_height = 28
+    item_padding = 10
+    item_spacing = 6
+    icon_width = 0
+    icon_height = 0
+    item_icon_space = 0
+    scrollbar = false
+}
+
++ progress_bar {
+    id = "__timeout__"
+    left = 25%
+    top = 84%
+    width = 50%
+    height = 4
+    show_text = false
+    fg_color = "#4d7cff"
+    bg_color = "#1a2540"
+    border_color = "#1a2540"
+}
+
++ label {
+    left = 0
+    top = 88%
+    width = 100%
+    align = "center"
+    font = "Unifont Regular 16"
+    color = "#6b7aa6"
+    text = "Enter: iniciar    e: editar    c: consola"
+}

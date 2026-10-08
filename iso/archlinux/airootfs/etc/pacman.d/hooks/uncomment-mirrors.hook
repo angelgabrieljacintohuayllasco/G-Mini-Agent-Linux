@@ -1,0 +1,15 @@
+# remove from airootfs!
+# De releng: activa los espejos HTTPS para poder usar pacman en la sesión live.
+
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = pacman-mirrorlist
+
+[Action]
+Description = Activando los espejos HTTPS en /etc/pacman.d/mirrorlist...
+When = PostTransaction
+Depends = pacman-mirrorlist
+Depends = sed
+Exec = /usr/bin/sed -E -i 's/#(Server = https:)/\1/g' /etc/pacman.d/mirrorlist

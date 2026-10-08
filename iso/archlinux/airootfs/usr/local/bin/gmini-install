@@ -1,0 +1,214 @@
+#!/usr/bin/env bash
+# Instala G-Mini OS (edición Arch Linux) en el disco con archinstall.
+#
+# 1. Reconstruye el paquete g-mini-agent-bin con los archivos ya instalados en
+#    la sesión live (makepkg; no vuelve a descargar el AppImage).
+# 2. Empaqueta los ajustes propios de G-Mini OS (escritorio, fondo, scripts).
+# 3. Los sirve en 127.0.0.1 y abre archinstall con una configuración de G-Mini
+#    OS cuyos custom_commands los instalan en el sistema nuevo: archinstall los
+#    ejecuta con arch-chroot, que comparte la red de la sesión live.
+#
+# archinstall sigue preguntando lo personal: disco, usuario y contraseñas.
+set -Eeuo pipefail
+
+# shellcheck source=iso/common/rootfs/usr/local/share/gmini/lib.sh
+. /usr/local/share/gmini/lib.sh
+
+gmini_in_terminal "Instalar G-Mini OS" "$0" "$@"
+if ((EUID != 0)); then
+    exec sudo -- "$0" "$@"
+fi
+
+WORK=/var/tmp/gmini-install
+SRV="${WORK}/srv"
+PORT=8642
+BUILD_USER="${SUDO_USER:-gmini}"
+SHARE=/usr/local/share/gmini
+SERVER_PID=""
+
+fail() {
+    printf '\nERROR: %s\n' "$*" >&2
+    gmini_pause "Pulsa Enter para cerrar."
+    exit 1
+}
+
+cleanup() {
+    if [[ -n "${SERVER_PID}" ]]; then
+        kill "${SERVER_PID}" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+
+cat <<'EOF'
+Instalar G-Mini OS en el disco
+==============================
+
+Se abrirá archinstall, el instalador oficial de Arch Linux, con G-Mini OS ya
+configurado: escritorio XFCE, español (Perú), teclado latinoamericano, audio,
+red y Bluetooth. Tú eliges:
+
+  - el disco ("Disk configuration"),
+  - tu usuario y contraseñas ("Authentication"),
+  - y revisas el resto antes de pulsar "Install".
+
+Al final se añaden G-Mini Agent y los ajustes de G-Mini OS al sistema nuevo.
+Hace falta internet: archinstall descarga los paquetes.
+
+ATENCIÓN: el disco que elijas puede quedar borrado. Haz una copia antes.
+
+EOF
+read -r -p "Escribe \"instalar\" para continuar: " answer || answer=""
+[[ "${answer}" == "instalar" ]] || { echo "Cancelado."; exit 0; }
+
+gmini_wait_online 30 || fail "no hay conexión a internet. Conéctate y vuelve a intentarlo."
+
+rm -rf -- "${WORK}"
+install -d -m 0755 "${WORK}" "${SRV}"
+
+# 1. G-Mini Agent: mismo PKGBUILD que generó el paquete de la ISO, pero con
+#    los archivos tomados del sistema live.
+PKGFILE=""
+if read -r _ installed < <(pacman -Q g-mini-agent-bin 2>/dev/null); then
+    echo "==> Reconstruyendo g-mini-agent-bin ${installed} desde la sesión live"
+    repack="${WORK}/repack"
+    install -d -o "${BUILD_USER}" "${repack}"
+    install -m 0644 -o "${BUILD_USER}" "${SHARE}/aur/PKGBUILD" "${SHARE}/aur/g-mini-agent-bin.install" "${repack}/"
+    cat >>"${repack}/PKGBUILD" <<EOF
+
+# --- G-Mini OS: reconstrucción desde los archivos instalados ---
+pkgver=${installed%-*}
+pkgrel=${installed##*-}
+source_x86_64=()
+sha256sums_x86_64=()
+noextract=()
+makedepends=()
+prepare() { :; }
+package() {
+    pacman -Qlq "\${pkgname}" | while IFS= read -r path; do
+        [[ -d "\${path}" ]] && continue
+        cp -a --parents "\${path}" "\${pkgdir}/"
+    done
+}
+EOF
+    if (cd "${repack}" && runuser -u "${BUILD_USER}" -- env PKGDEST="${repack}" makepkg --nodeps --force --noconfirm); then
+        PKGFILE="$(find "${repack}" -maxdepth 1 -name 'g-mini-agent-bin-*.pkg.tar.*' -printf '%f\n' | head -n 1)"
+        mv -- "${repack}/${PKGFILE}" "${SRV}/"
+    else
+        echo "AVISO: no se pudo reconstruir el paquete; G-Mini Agent no se añadirá al sistema nuevo." >&2
+    fi
+else
+    echo "AVISO: g-mini-agent-bin no está instalado en esta sesión." >&2
+fi
+
+# 2. Ajustes de G-Mini OS que no pertenecen a ningún paquete.
+echo "==> Empaquetando los ajustes de G-Mini OS"
+tar --zstd -cpf "${SRV}/gmini-extras.tar.zst" -C / \
+    usr/local/bin/gmini-autostart \
+    usr/local/bin/gmini-install-ollama \
+    usr/local/bin/gmini-lang \
+    usr/local/bin/gmini-polkit-agent \
+    usr/local/bin/gmini-session-setup \
+    usr/local/bin/gmini-welcome \
+    usr/local/lib/gmini \
+    usr/local/share/gmini \
+    usr/local/share/applications/gmini-welcome.desktop \
+    usr/local/share/applications/gmini-ollama.desktop \
+    usr/local/share/icons/hicolor \
+    usr/share/backgrounds/g-mini \
+    etc/skel/.config/xfce4 \
+    etc/skel/.config/autostart \
+    etc/xdg/autostart/gmini-polkit-agent.desktop \
+    etc/lightdm/lightdm-gtk-greeter.conf
+
+# 3. Configuración de archinstall. Cada custom_command termina con éxito
+#    aunque falle: archinstall abortaría la instalación (antes de genfstab)
+#    por un paso opcional.
+python3 - "${SHARE}/arch/install-packages.txt" "${PORT}" "${PKGFILE}" "${WORK}/user_configuration.json" <<'PY'
+import json
+import sys
+
+packages_file, port, pkgfile, output = sys.argv[1:5]
+packages = []
+with open(packages_file, encoding="utf-8") as handle:
+    for line in handle:
+        name = line.split("#", 1)[0].strip()
+        if name:
+            packages.append(name)
+
+base = f"http://127.0.0.1:{port}"
+log = "/var/log/gmini-install.log"
+
+
+def safe(step, *steps):
+    # "set -e" no actúa dentro de un grupo seguido de "||": se encadena con &&.
+    chain = " && ".join(steps)
+    return f"{{ {chain}; }} >>{log} 2>&1 || echo 'G-Mini OS: falló {step} (ver {log})'"
+
+
+commands = []
+if pkgfile:
+    commands.append(safe(
+        "la instalación de G-Mini Agent",
+        f"curl -fsS -o /var/tmp/{pkgfile} {base}/{pkgfile}",
+        f"pacman -U --noconfirm --needed /var/tmp/{pkgfile}",
+        f"rm -f /var/tmp/{pkgfile}",
+    ))
+commands.append(safe(
+    "la copia de los ajustes de G-Mini OS",
+    f"curl -fsS -o /var/tmp/gmini-extras.tar.zst {base}/gmini-extras.tar.zst",
+    "tar --zstd -xpf /var/tmp/gmini-extras.tar.zst -C /",
+    "rm -f /var/tmp/gmini-extras.tar.zst",
+    "/usr/local/lib/gmini/post-install.sh",
+))
+
+config = {
+    "archinstall-language": "Spanish",
+    "app_config": {
+        "audio_config": {"audio": "pipewire"},
+        "bluetooth_config": {"enabled": True},
+    },
+    "hostname": "g-mini-os",
+    "kernels": ["linux"],
+    "locale_config": {"kb_layout": "la-latin1", "sys_enc": "UTF-8", "sys_lang": "es_PE.UTF-8"},
+    "network_config": {"type": "nm"},
+    "ntp": True,
+    "packages": packages,
+    "profile_config": {
+        "gfx_driver": "All open-source",
+        "greeter": "lightdm-gtk-greeter",
+        "profile": {"main": "Desktop", "details": ["Xfce4"]},
+    },
+    "swap": {"enabled": True, "algorithm": "zstd"},
+    "timezone": "America/Lima",
+    "custom_commands": commands,
+}
+with open(output, "w", encoding="utf-8") as handle:
+    json.dump(config, handle, indent=2, ensure_ascii=False)
+PY
+
+# 4. Servidor local para los custom_commands.
+python3 -m http.server --bind 127.0.0.1 --directory "${SRV}" "${PORT}" >"${WORK}/http.log" 2>&1 &
+SERVER_PID=$!
+sleep 1
+kill -0 "${SERVER_PID}" 2>/dev/null || fail "no se pudo abrir el puerto ${PORT} en 127.0.0.1"
+
+# 5. archinstall
+echo "==> Abriendo archinstall"
+if archinstall --config "${WORK}/user_configuration.json"; then
+    cat <<'EOF'
+
+Instalación terminada. Al reiniciar, quita el USB o la ISO y entra con el
+usuario que creaste. G-Mini Agent se abrirá al iniciar sesión y la primera vez
+descargará sus componentes (unos 1,5 GB).
+Si algún paso de G-Mini OS falló, el detalle está en /var/log/gmini-install.log
+del sistema instalado.
+EOF
+else
+    cat <<'EOF'
+
+archinstall terminó con errores. El registro está en /var/log/archinstall/.
+Puedes volver a intentarlo con este mismo acceso o usar "archinstall" a secas
+y luego instalar G-Mini Agent con el PKGBUILD (consulta el README).
+EOF
+fi
+gmini_pause "Pulsa Enter para cerrar."

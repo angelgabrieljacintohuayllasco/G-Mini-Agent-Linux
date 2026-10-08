@@ -1,0 +1,2 @@
+# Solo en la sesión live: el usuario gmini usa sudo sin contraseña.
+gmini ALL=(ALL:ALL) NOPASSWD: ALL

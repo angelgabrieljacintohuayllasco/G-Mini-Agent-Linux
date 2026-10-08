@@ -1,0 +1,127 @@
+#!/bin/sh
+# Cambia el idioma y el teclado entre español (Perú) e inglés.
+#
+# Uso:
+#   gmini-lang es|en [--restart]   sistema + sesión del usuario actual;
+#                                  --restart reinicia la sesión gráfica
+#   gmini-lang --system es|en      solo la parte de sistema (root)
+#   gmini-lang --boot              al arrancar (root): aplica gmini.lang=es|en
+#                                  de la línea del kernel, sin D-Bus
+#
+# Español: es_PE.UTF-8, teclado latinoamericano (latam) y estadounidense.
+# Inglés: en_US.UTF-8, teclado estadounidense y latinoamericano.
+# Alt+Mayús alterna entre las dos distribuciones de teclado.
+set -eu
+
+XKB_OPTIONS=grp:alt_shift_toggle
+
+usage() {
+    sed -n '2,/^set -eu/{/^set -eu/d;s/^# \{0,1\}//;p}' "$0"
+    exit "${1:-0}"
+}
+
+select_lang() {
+    case "$1" in
+        es)
+            LOCALE=es_PE.UTF-8
+            XKB=latam,us
+            VCONSOLE=la-latin1
+            ;;
+        en)
+            LOCALE=en_US.UTF-8
+            XKB=us,latam
+            VCONSOLE=us
+            ;;
+        *) usage 2 ;;
+    esac
+}
+
+is_debian_like() {
+    [ -f /etc/debian_version ]
+}
+
+# Escritura directa de ficheros: se usa al arrancar, antes de LightDM.
+write_system_files() {
+    if is_debian_like; then
+        printf 'LANG=%s\n' "${LOCALE}" >/etc/default/locale
+    else
+        printf 'LANG=%s\n' "${LOCALE}" >/etc/locale.conf
+        printf 'KEYMAP=%s\n' "${VCONSOLE}" >/etc/vconsole.conf
+    fi
+    mkdir -p /etc/X11/xorg.conf.d
+    cat >/etc/X11/xorg.conf.d/00-keyboard.conf <<EOF
+Section "InputClass"
+        Identifier "system-keyboard"
+        MatchIsKeyboard "on"
+        Option "XkbLayout" "${XKB}"
+        Option "XkbOptions" "${XKB_OPTIONS}"
+EndSection
+EOF
+    # LightDM toma el idioma de la sesión de AccountsService.
+    for home in /home/*; do
+        user="$(basename "${home}")"
+        uid="$(id -u "${user}" 2>/dev/null || echo 0)"
+        [ "${uid}" -ge 1000 ] || continue
+        mkdir -p /var/lib/AccountsService/users
+        file="/var/lib/AccountsService/users/${user}"
+        if [ -f "${file}" ] && grep -q '^Language=' "${file}"; then
+            sed -i "s/^Language=.*/Language=${LOCALE}/" "${file}"
+        else
+            printf '[User]\nLanguage=%s\n' "${LOCALE}" >>"${file}"
+        fi
+    done
+}
+
+# Con el sistema en marcha se pasa por localed (systemd), que además
+# actualiza la configuración en caliente.
+apply_system() {
+    localectl set-locale "LANG=${LOCALE}"
+    localectl set-x11-keymap "${XKB}" "" "" "${XKB_OPTIONS}"
+    if ! is_debian_like; then
+        localectl set-keymap --no-convert "${VCONSOLE}" || true
+    fi
+}
+
+apply_user() {
+    uid="$(id -u)"
+    if command -v busctl >/dev/null 2>&1 &&
+        busctl call org.freedesktop.Accounts "/org/freedesktop/Accounts/User${uid}" \
+            org.freedesktop.Accounts.User SetLanguage s "${LOCALE}" 2>/dev/null; then
+        return 0
+    fi
+    printf '[Desktop]\nLanguage=%s\n' "${LOCALE}" >"${HOME}/.dmrc"
+}
+
+case "${1:-}" in
+    --boot)
+        lang="$(tr ' ' '\n' </proc/cmdline | sed -n 's/^gmini\.lang=//p' | tail -n 1)"
+        [ -n "${lang}" ] || exit 0
+        select_lang "${lang}"
+        write_system_files
+        ;;
+    --system)
+        select_lang "${2:-}"
+        apply_system
+        ;;
+    es | en)
+        select_lang "$1"
+        if [ "$(id -u)" -eq 0 ]; then
+            apply_system
+        else
+            pkexec "$0" --system "$1"
+            apply_user
+        fi
+        if [ "${2:-}" = "--restart" ]; then
+            # shellcheck source=iso/common/rootfs/usr/local/share/gmini/lib.sh
+            . /usr/local/share/gmini/lib.sh
+            if gmini_is_live; then
+                # Con autologin, reiniciar LightDM abre la sesión ya en el idioma nuevo.
+                pkexec systemctl restart display-manager
+            else
+                xfce4-session-logout --logout
+            fi
+        fi
+        ;;
+    -h | --help) usage 0 ;;
+    *) usage 2 ;;
+esac

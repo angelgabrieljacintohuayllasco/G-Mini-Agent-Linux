@@ -1,0 +1,67 @@
+G-Mini OS: guía rápida
+======================
+
+G-Mini OS es un Linux con escritorio XFCE y G-Mini Agent ya instalado:
+un agente de IA que ve tu pantalla, usa el mouse, el teclado y el navegador,
+recuerda lo que le cuentas y habla.
+
+
+Sesión live
+-----------
+Usuario: gmini
+Contraseña: gmini (también para sudo)
+
+Todo lo que hagas vive en la RAM y se pierde al apagar. Para conservar tus
+datos, instala G-Mini OS en el disco (acceso "Instalar G-Mini OS").
+
+
+Primer arranque de G-Mini Agent
+-------------------------------
+G-Mini Agent se abre solo al iniciar sesión. La primera vez descarga su
+propio Python 3.13 y sus componentes (unos 1,5 GB) en
+~/.local/share/g-mini-agent, así que necesita internet:
+
+  1. Conéctate a una red con el icono de red del panel (abajo a la derecha).
+  2. En la ventana "Preparando G-Mini", pulsa Reintentar si falló.
+
+En la sesión live esa descarga ocupa RAM: usa un equipo con 8 GB o más.
+
+Las API keys de los proveedores de IA se guardan en el llavero del sistema
+(gnome-keyring). En la sesión live el llavero no tiene contraseña porque
+todo se borra al apagar.
+
+Si algo falla, el detalle está en:
+    ~/.local/share/g-mini-agent/logs/setup.log
+
+
+Instalar en el disco
+--------------------
+Abre "Instalar G-Mini OS" en el escritorio. Necesitas internet.
+
+  - Edición Arch Linux: se abre archinstall con G-Mini OS ya configurado
+    (XFCE, idioma, teclado, audio, red). Tú eliges el disco, el usuario y
+    las contraseñas. Al terminar se añade G-Mini Agent al sistema nuevo.
+  - Edición Debian: se abre el instalador gráfico Calamares, que copia este
+    mismo sistema (con G-Mini Agent) al disco.
+
+Haz una copia de tus datos antes: instalar puede borrar el disco elegido.
+
+
+Modelos locales (opcional)
+--------------------------
+"Instalar Ollama" (menú de aplicaciones) instala Ollama para usar modelos
+sin conexión. Luego, en una terminal:
+    ollama pull llama3.2:3b
+y en G-Mini Agent: Ajustes > Proveedor > Ollama.
+
+
+Idioma y teclado
+----------------
+Español (Perú) con teclado latinoamericano y estadounidense. Alt+Mayús
+alterna el teclado. Para pasar todo a inglés: "Bienvenida a G-Mini OS" >
+"Switch to English", o elige "G-Mini OS (English)" en el menú de arranque.
+
+
+Más información
+---------------
+G-Mini Agent: https://github.com/angelgabrieljacintohuayllasco/G-Mini-Agent

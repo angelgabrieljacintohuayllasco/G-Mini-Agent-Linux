@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=G-Mini OS Welcome
+Name[es]=Bienvenida a G-Mini OS
+Exec=gmini-welcome --autostart
+Icon=gmini-os
+OnlyShowIn=XFCE;
+Terminal=false

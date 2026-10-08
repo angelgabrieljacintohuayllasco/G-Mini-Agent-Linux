@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Authentication agent
+Name[es]=Agente de autenticación
+Comment=Asks for the administrator password when an application needs it
+Comment[es]=Pide la contraseña de administrador cuando una aplicación la necesita
+Exec=gmini-polkit-agent
+OnlyShowIn=XFCE;
+NoDisplay=true
+Terminal=false

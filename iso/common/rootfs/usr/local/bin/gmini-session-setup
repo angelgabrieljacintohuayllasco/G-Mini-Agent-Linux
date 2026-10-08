@@ -1,0 +1,80 @@
+#!/bin/sh
+# Ajustes por usuario al iniciar sesión en XFCE. Se ejecuta en cada inicio de
+# sesión (autostart) y es idempotente: respeta lo que el usuario cambie.
+#
+#  1. Fondo de G-Mini OS en todos los monitores y espacios de trabajo. Los
+#     nombres de monitor dependen del hardware (Virtual-1, eDP-1...), así que
+#     se escriben los que haya ahora en vez de fijarlos en el perfil.
+#  2. Accesos directos en el escritorio (carpeta localizada: Escritorio).
+set -u
+
+# shellcheck source=iso/common/rootfs/usr/local/share/gmini/lib.sh
+. /usr/local/share/gmini/lib.sh
+
+STATE="${XDG_CONFIG_HOME:-${HOME}/.config}/gmini"
+WALLPAPER=/usr/share/backgrounds/g-mini/g-mini-os-2560x1440.png
+mkdir -p "${STATE}"
+
+set_wallpaper() {
+    command -v xfconf-query >/dev/null 2>&1 || return 0
+    command -v xrandr >/dev/null 2>&1 || return 0
+
+    workspaces="$(xfconf-query -c xfwm4 -p /general/workspace_count 2>/dev/null || echo 1)"
+    xrandr --listmonitors 2>/dev/null | awk 'NR > 1 { print $NF }' | while read -r monitor; do
+        ws=0
+        while [ "${ws}" -lt "${workspaces}" ]; do
+            base="/backdrop/screen0/monitor${monitor}/workspace${ws}"
+            current="$(xfconf-query -c xfce4-desktop -p "${base}/last-image" 2>/dev/null || true)"
+            # Solo si no hay fondo o es el de XFCE: si el usuario eligió otro,
+            # se queda.
+            case "${current}" in
+                "" | /usr/share/backgrounds/xfce/*)
+                    xfconf-query -c xfce4-desktop -p "${base}/last-image" -n -t string -s "${WALLPAPER}"
+                    xfconf-query -c xfce4-desktop -p "${base}/image-style" -n -t int -s 5
+                    ;;
+            esac
+            ws=$((ws + 1))
+        done
+    done
+}
+
+# Copia un lanzador al escritorio y lo marca como de confianza (XFCE pide
+# confirmación para lanzadores sin bit de ejecución o sin esta suma).
+add_desktop_launcher() {
+    src="$1"
+    dest="${DESKTOP_DIR}/$(basename "${src}")"
+    [ -f "${src}" ] || return 0
+    [ -e "${dest}" ] && return 0
+    cp "${src}" "${dest}"
+    chmod +x "${dest}"
+    if command -v gio >/dev/null 2>&1; then
+        gio set -t string "${dest}" metadata::xfce-exe-checksum "$(sha256sum "${dest}" | cut -d' ' -f1)" 2>/dev/null || true
+    fi
+}
+
+setup_desktop() {
+    # Solo la primera vez: si el usuario borra un acceso, no vuelve a salir.
+    [ -e "${STATE}/desktop-done" ] && return 0
+    command -v xdg-user-dirs-update >/dev/null 2>&1 && xdg-user-dirs-update
+    DESKTOP_DIR="$(xdg-user-dir DESKTOP 2>/dev/null || echo "${HOME}/Desktop")"
+    [ "${DESKTOP_DIR}" = "${HOME}" ] && return 0
+    mkdir -p "${DESKTOP_DIR}"
+
+    if app_desktop="$(gmini_app_desktop)"; then
+        add_desktop_launcher "${app_desktop}"
+    fi
+    add_desktop_launcher /usr/local/share/applications/gmini-welcome.desktop
+    if gmini_is_live; then
+        add_desktop_launcher /usr/local/share/applications/gmini-install.desktop
+    fi
+    if [ "$(gmini_ui_lang)" = es ]; then
+        cp -n "${GMINI_SHARE}/LEEME.txt" "${DESKTOP_DIR}/" 2>/dev/null || true
+    else
+        cp -n "${GMINI_SHARE}/README.txt" "${DESKTOP_DIR}/" 2>/dev/null || true
+    fi
+    touch "${STATE}/desktop-done"
+}
+
+set_wallpaper
+setup_desktop
+exit 0

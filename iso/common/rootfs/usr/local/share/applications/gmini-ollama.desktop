@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Install Ollama
+Name[es]=Instalar Ollama
+Comment=Optional local AI models for G-Mini Agent
+Comment[es]=Modelos de IA locales opcionales para G-Mini Agent
+Exec=gmini-install-ollama
+Icon=gmini-os
+Terminal=false
+Categories=System;
+Keywords=ollama;modelos;models;local;

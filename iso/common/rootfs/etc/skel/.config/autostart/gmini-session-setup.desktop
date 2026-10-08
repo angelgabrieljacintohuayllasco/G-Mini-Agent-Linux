@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=G-Mini OS session setup
+Name[es]=Ajustes de sesión de G-Mini OS
+Comment=Wallpaper and desktop shortcuts
+Comment[es]=Fondo de escritorio y accesos directos
+Exec=gmini-session-setup
+OnlyShowIn=XFCE;
+NoDisplay=true
+Terminal=false

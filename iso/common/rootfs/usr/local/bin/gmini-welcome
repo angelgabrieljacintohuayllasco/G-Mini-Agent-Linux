@@ -1,0 +1,301 @@
+#!/usr/bin/env python3
+"""Pantalla de bienvenida de G-Mini OS.
+
+Se abre al iniciar sesión (autostart con --autostart) y desde el lanzador
+"Bienvenida". Explica el primer arranque de G-Mini Agent y da acceso a la red,
+la instalación en disco, Ollama y el cambio de idioma.
+"""
+
+from __future__ import annotations
+
+import configparser
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+from gi.repository import Gdk, GdkPixbuf, Gtk  # noqa: E402
+
+LOGO = "/usr/local/share/icons/hicolor/scalable/apps/gmini-os.svg"
+CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "gmini" / "welcome.ini"
+
+TEXTS = {
+    "es": {
+        "title": "Bienvenido a G-Mini OS",
+        "subtitle": "Linux con G-Mini Agent, tu agente de IA de escritorio, ya instalado.",
+        "first_title": "Primer arranque de G-Mini Agent",
+        "first_text": (
+            "La primera vez, G-Mini descarga su propio Python y sus componentes "
+            "(unos 1,5 GB). Conéctate a internet antes de abrirlo."
+        ),
+        "open": "Abrir G-Mini Agent",
+        "network": "Configurar la red",
+        "install_title": "Instalar en el disco",
+        "install_text": "Copia G-Mini OS a tu disco para conservar tus datos, ajustes y modelos.",
+        "install": "Instalar G-Mini OS",
+        "ollama_title": "Modelos locales (opcional)",
+        "ollama_text": "Ollama ejecuta modelos de IA en tu equipo. Cada modelo ocupa varios GB.",
+        "ollama": "Instalar Ollama",
+        "lang_title": "Idioma y teclado",
+        "lang_text": "Español (Perú) con teclado latinoamericano. Alt+Mayús cambia la distribución.",
+        "lang": "Switch to English",
+        "lang_confirm": "Se reiniciará la sesión para aplicar el idioma. Guarda tu trabajo antes de seguir.",
+        "show": "Mostrar esta bienvenida al iniciar sesión",
+        "live_note": "Sesión live: usuario gmini, contraseña gmini. Lo que guardes se pierde al apagar.",
+        "close": "Cerrar",
+        "continue": "Continuar",
+        "cancel": "Cancelar",
+        "missing": "No se encontró {}.",
+    },
+    "en": {
+        "title": "Welcome to G-Mini OS",
+        "subtitle": "Linux with G-Mini Agent, your desktop AI agent, already installed.",
+        "first_title": "G-Mini Agent first run",
+        "first_text": (
+            "On first run, G-Mini downloads its own Python and components "
+            "(about 1.5 GB). Connect to the internet before opening it."
+        ),
+        "open": "Open G-Mini Agent",
+        "network": "Network settings",
+        "install_title": "Install to disk",
+        "install_text": "Copy G-Mini OS to your disk to keep your data, settings and models.",
+        "install": "Install G-Mini OS",
+        "ollama_title": "Local models (optional)",
+        "ollama_text": "Ollama runs AI models on your computer. Each model takes several GB.",
+        "ollama": "Install Ollama",
+        "lang_title": "Language and keyboard",
+        "lang_text": "English (US) with a US keyboard. Alt+Shift switches the layout.",
+        "lang": "Cambiar a español",
+        "lang_confirm": "The session will restart to apply the language. Save your work first.",
+        "show": "Show this welcome screen at login",
+        "live_note": "Live session: user gmini, password gmini. Anything you save is lost on shutdown.",
+        "close": "Close",
+        "continue": "Continue",
+        "cancel": "Cancel",
+        "missing": "{} was not found.",
+    },
+}
+
+CSS = b"""
+window.gmini { background-color: #0b1220; }
+.gmini .title { color: #e6ebff; font-size: 20pt; font-weight: 600; }
+.gmini .subtitle { color: #8a97c2; font-size: 11pt; }
+.gmini .card {
+    background-color: #111b33;
+    border: 1px solid #1d2a4d;
+    border-radius: 10px;
+    padding: 16px;
+}
+.gmini .card-title { color: #e6ebff; font-size: 11pt; font-weight: 600; }
+.gmini .card-text { color: #a9b5d9; font-size: 10pt; }
+.gmini .note { color: #6b7aa6; font-size: 9pt; }
+.gmini button {
+    background-image: none;
+    border-radius: 8px;
+    padding: 6px 14px;
+    box-shadow: none;
+    text-shadow: none;
+}
+.gmini button.primary { background-color: #4d7cff; border: 1px solid #4d7cff; color: #ffffff; font-weight: 600; }
+.gmini button.primary:hover { background-color: #6a91ff; border-color: #6a91ff; }
+.gmini button.secondary { background-color: transparent; border: 1px solid #2a3a66; color: #c8d3f5; }
+.gmini button.secondary:hover { background-color: #16224a; }
+.gmini checkbutton label { color: #a9b5d9; }
+"""
+
+
+def ui_lang() -> str:
+    value = os.environ.get("LC_ALL") or os.environ.get("LC_MESSAGES") or os.environ.get("LANG") or ""
+    return "es" if value.startswith("es") else "en"
+
+
+def is_live() -> bool:
+    # Con copytoram, archiso desmonta /run/archiso/bootmnt pero no /run/archiso.
+    if Path("/run/archiso").is_dir() or Path("/run/live/medium").is_dir():
+        return True
+    try:
+        args = Path("/proc/cmdline").read_text().split()
+    except OSError:
+        return False
+    return "boot=live" in args or any(arg.startswith("archisobasedir=") for arg in args)
+
+
+def load_show_at_login() -> bool:
+    parser = configparser.ConfigParser()
+    parser.read(CONFIG)
+    return parser.getboolean("welcome", "show_at_login", fallback=True)
+
+
+def save_show_at_login(value: bool) -> None:
+    CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    parser = configparser.ConfigParser()
+    parser["welcome"] = {"show_at_login": "true" if value else "false"}
+    with CONFIG.open("w", encoding="utf-8") as handle:
+        parser.write(handle)
+
+
+class Welcome(Gtk.Window):
+    def __init__(self, lang: str) -> None:
+        super().__init__(title="G-Mini OS")
+        self.t = TEXTS[lang]
+        self.lang = lang
+        self.get_style_context().add_class("gmini")
+        self.set_default_size(780, 0)
+        self.set_resizable(False)
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.set_icon_name("gmini-os")
+        self.connect("destroy", Gtk.main_quit)
+
+        root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
+        root.set_border_width(28)
+        self.add(root)
+        root.pack_start(self._header(), False, False, 0)
+
+        grid = Gtk.Grid(column_spacing=14, row_spacing=14, column_homogeneous=True)
+        grid.attach(
+            self._card(
+                self.t["first_title"],
+                self.t["first_text"],
+                [(self.t["open"], "primary", self.on_open), (self.t["network"], "secondary", self.on_network)],
+            ),
+            0, 0, 1, 1,
+        )
+        if is_live():
+            install = self._card(
+                self.t["install_title"], self.t["install_text"], [(self.t["install"], "secondary", self.on_install)]
+            )
+        else:
+            install = self._card(
+                self.t["ollama_title"], self.t["ollama_text"], [(self.t["ollama"], "secondary", self.on_ollama)]
+            )
+        grid.attach(install, 1, 0, 1, 1)
+        if is_live():
+            grid.attach(
+                self._card(
+                    self.t["ollama_title"], self.t["ollama_text"], [(self.t["ollama"], "secondary", self.on_ollama)]
+                ),
+                0, 1, 1, 1,
+            )
+        grid.attach(
+            self._card(self.t["lang_title"], self.t["lang_text"], [(self.t["lang"], "secondary", self.on_language)]),
+            1 if is_live() else 0, 1, 1, 1,
+        )
+        root.pack_start(grid, False, False, 0)
+        root.pack_start(self._footer(), False, False, 0)
+
+    def _header(self) -> Gtk.Widget:
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        try:
+            pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(LOGO, 64, 64)
+            box.pack_start(Gtk.Image.new_from_pixbuf(pixbuf), False, False, 0)
+        except Exception:  # noqa: BLE001 - sin logo la ventana sigue siendo útil
+            pass
+        text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        text.set_valign(Gtk.Align.CENTER)
+        text.pack_start(self._label(self.t["title"], "title"), False, False, 0)
+        text.pack_start(self._label(self.t["subtitle"], "subtitle"), False, False, 0)
+        box.pack_start(text, True, True, 0)
+        return box
+
+    def _card(self, title: str, body: str, actions) -> Gtk.Widget:
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        card.get_style_context().add_class("card")
+        card.pack_start(self._label(title, "card-title"), False, False, 0)
+        card.pack_start(self._label(body, "card-text", wrap=True), True, True, 0)
+        buttons = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        for label, style, handler in actions:
+            button = Gtk.Button(label=label)
+            button.get_style_context().add_class(style)
+            button.connect("clicked", handler)
+            buttons.pack_start(button, False, False, 0)
+        card.pack_end(buttons, False, False, 0)
+        return card
+
+    def _footer(self) -> Gtk.Widget:
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        left = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        check = Gtk.CheckButton(label=self.t["show"])
+        check.set_active(load_show_at_login())
+        check.connect("toggled", lambda widget: save_show_at_login(widget.get_active()))
+        left.pack_start(check, False, False, 0)
+        if is_live():
+            left.pack_start(self._label(self.t["live_note"], "note", wrap=True), False, False, 0)
+        box.pack_start(left, True, True, 0)
+        close = Gtk.Button(label=self.t["close"])
+        close.get_style_context().add_class("secondary")
+        close.set_valign(Gtk.Align.END)
+        close.connect("clicked", lambda _button: self.destroy())
+        box.pack_end(close, False, False, 0)
+        return box
+
+    @staticmethod
+    def _label(text: str, style: str, wrap: bool = False) -> Gtk.Label:
+        label = Gtk.Label(label=text, xalign=0)
+        label.get_style_context().add_class(style)
+        if wrap:
+            label.set_line_wrap(True)
+            label.set_max_width_chars(42)
+        return label
+
+    def _spawn(self, *argv: str) -> None:
+        if shutil.which(argv[0]) is None:
+            self._message(self.t["missing"].format(argv[0]))
+            return
+        subprocess.Popen(argv, start_new_session=True)  # noqa: S603 - argumentos fijos
+
+    def _message(self, text: str) -> None:
+        dialog = Gtk.MessageDialog(
+            transient_for=self, modal=True, message_type=Gtk.MessageType.INFO, buttons=Gtk.ButtonsType.OK, text=text
+        )
+        dialog.run()
+        dialog.destroy()
+
+    def on_open(self, _button) -> None:
+        self._spawn("gmini-autostart", "--no-wait")
+
+    def on_network(self, _button) -> None:
+        self._spawn("nm-connection-editor")
+
+    def on_install(self, _button) -> None:
+        self._spawn("gmini-install")
+
+    def on_ollama(self, _button) -> None:
+        self._spawn("gmini-install-ollama")
+
+    def on_language(self, _button) -> None:
+        dialog = Gtk.MessageDialog(
+            transient_for=self,
+            modal=True,
+            message_type=Gtk.MessageType.QUESTION,
+            buttons=Gtk.ButtonsType.NONE,
+            text=self.t["lang_confirm"],
+        )
+        dialog.add_buttons(self.t["cancel"], Gtk.ResponseType.CANCEL, self.t["continue"], Gtk.ResponseType.OK)
+        response = dialog.run()
+        dialog.destroy()
+        if response == Gtk.ResponseType.OK:
+            self._spawn("gmini-lang", "en" if self.lang == "es" else "es", "--restart")
+
+
+def main() -> int:
+    if "--autostart" in sys.argv[1:] and not (is_live() or load_show_at_login()):
+        return 0
+    provider = Gtk.CssProvider()
+    provider.load_from_data(CSS)
+    screen = Gdk.Screen.get_default()
+    if screen is None:
+        print("gmini-welcome necesita una sesión gráfica", file=sys.stderr)
+        return 1
+    Gtk.StyleContext.add_provider_for_screen(screen, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+    window = Welcome(ui_lang())
+    window.show_all()
+    Gtk.main()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

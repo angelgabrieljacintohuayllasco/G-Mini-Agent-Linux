@@ -1,0 +1,66 @@
+#!/bin/sh
+# Instala Ollama para usar modelos de IA locales con G-Mini Agent.
+# Es opcional: no viene en la ISO para mantenerla pequeña.
+set -eu
+
+# shellcheck source=iso/common/rootfs/usr/local/share/gmini/lib.sh
+. /usr/local/share/gmini/lib.sh
+
+gmini_in_terminal "Instalar Ollama" "$0" "$@"
+
+cat <<'EOF'
+Ollama ejecuta modelos de IA en tu equipo, sin enviar datos a la nube.
+
+  - La instalación necesita internet.
+  - Cada modelo ocupa entre 1 y 10 GB. En la sesión live todo se guarda en
+    la RAM y se pierde al apagar: para uso continuo, instala G-Mini OS en el
+    disco primero.
+  - Modelo sugerido para empezar: llama3.2:3b (unos 2 GB, funciona sin GPU
+    con 8 GB de RAM).
+
+EOF
+printf 'Escribe "si" para instalar Ollama: '
+read -r answer || answer=""
+case "${answer}" in
+    si | sí | SI | Sí | y | yes) ;;
+    *)
+        echo "Cancelado."
+        exit 0
+        ;;
+esac
+
+if ! gmini_wait_online 20; then
+    echo "No hay conexión a internet. Conéctate y vuelve a intentarlo."
+    gmini_pause "Pulsa Enter para cerrar."
+    exit 1
+fi
+
+case "$(gmini_distro)" in
+    arch)
+        if gmini_is_live; then
+            # En la sesión live no se actualiza todo el sistema (-u): bajaría
+            # cientos de MB a la RAM. Ollama solo depende de glibc, libgcc y
+            # libstdc++ (unos 15 MB).
+            sudo pacman -Sy --needed --noconfirm ollama
+        else
+            sudo pacman -Syu --needed --noconfirm ollama
+        fi
+        sudo systemctl enable --now ollama.service
+        ;;
+    *)
+        # Debian no empaqueta Ollama: se usa el instalador oficial, que pide
+        # sudo por su cuenta.
+        curl -fsSL https://ollama.com/install.sh | sh
+        ;;
+esac
+
+cat <<'EOF'
+
+Ollama está instalado y escuchando en http://127.0.0.1:11434.
+
+Para descargar un modelo:
+    ollama pull llama3.2:3b
+
+En G-Mini Agent: Ajustes > Proveedor > Ollama, y elige el modelo descargado.
+EOF
+gmini_pause "Pulsa Enter para cerrar."

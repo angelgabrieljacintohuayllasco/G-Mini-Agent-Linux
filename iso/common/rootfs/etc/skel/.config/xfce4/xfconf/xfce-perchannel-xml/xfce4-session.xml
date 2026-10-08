@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- LaunchGNOME arranca gnome-keyring con la sesión: G-Mini guarda las API
+     keys en el llavero (Secret Service). -->
+<channel name="xfce4-session" version="1.0">
+  <property name="compat" type="empty">
+    <property name="LaunchGNOME" type="bool" value="true"/>
+  </property>
+  <property name="general" type="empty">
+    <property name="SaveOnExit" type="bool" value="false"/>
+  </property>
+</channel>

@@ -1,0 +1,12 @@
+#!/bin/sh
+# Agente de polkit para XFCE (pide la contraseña de administrador cuando una
+# app la necesita). Cada distro empaqueta uno distinto.
+for agent in \
+    /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 \
+    /usr/libexec/polkit-gnome-authentication-agent-1 \
+    /usr/bin/lxpolkit; do
+    if [ -x "${agent}" ]; then
+        exec "${agent}"
+    fi
+done
+exit 0

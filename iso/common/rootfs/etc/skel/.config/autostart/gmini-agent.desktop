@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=G-Mini Agent
+Comment=Open G-Mini Agent at login
+Comment[es]=Abrir G-Mini Agent al iniciar sesión
+Exec=gmini-autostart
+Icon=gmini-agent-ui
+Terminal=false

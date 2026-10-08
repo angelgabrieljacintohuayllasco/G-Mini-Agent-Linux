@@ -1,0 +1,37 @@
+#!/bin/sh
+# Abre G-Mini Agent al iniciar sesión.
+#
+# La primera vez la app descarga su propio Python 3.13 y sus componentes
+# (unos 1,5 GB). Si todavía no hay red (por ejemplo, falta elegir la Wi-Fi),
+# se avisa y la app se abre igual: su ventana de preparación tiene "Reintentar".
+#
+# Uso: gmini-autostart [--no-wait] [argumentos para la app]
+set -u
+
+# shellcheck source=iso/common/rootfs/usr/local/share/gmini/lib.sh
+. /usr/local/share/gmini/lib.sh
+
+wait_network=1
+if [ "${1:-}" = "--no-wait" ]; then
+    wait_network=0
+    shift
+fi
+
+if ! app="$(gmini_app_bin)"; then
+    gmini_notify "G-Mini Agent no está instalado" "No se encontró el programa en /opt/G-Mini Agent."
+    exit 1
+fi
+
+if ! gmini_runtime_ready && [ "${wait_network}" -eq 1 ]; then
+    if ! gmini_wait_online 45; then
+        if [ "$(gmini_ui_lang)" = es ]; then
+            gmini_notify "G-Mini Agent necesita internet" \
+                "La primera vez descarga sus componentes (unos 1,5 GB). Conéctate a una red y pulsa Reintentar en la ventana de G-Mini."
+        else
+            gmini_notify "G-Mini Agent needs internet" \
+                "On first run it downloads its components (about 1.5 GB). Connect to a network and press Retry in the G-Mini window."
+        fi
+    fi
+fi
+
+exec "${app}" "$@"

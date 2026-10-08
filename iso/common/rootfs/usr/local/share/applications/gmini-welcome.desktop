@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=G-Mini OS Welcome
+Name[es]=Bienvenida a G-Mini OS
+Comment=First steps, network, language and local models
+Comment[es]=Primeros pasos, red, idioma y modelos locales
+Exec=gmini-welcome
+Icon=gmini-os
+Terminal=false
+Categories=Settings;
+Keywords=welcome;gmini;bienvenida;

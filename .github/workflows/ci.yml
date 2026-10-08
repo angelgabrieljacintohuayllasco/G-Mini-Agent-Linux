@@ -1,0 +1,85 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ACTIONLINT_VERSION: "1.7.12"
+
+jobs:
+  lint:
+    name: Lint y comprobaciones en seco
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar herramientas
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends \
+            shellcheck yamllint desktop-file-utils libxml2-utils dash
+          curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" \
+            | tar -xz -C "${RUNNER_TEMP}" actionlint
+          echo "${RUNNER_TEMP}" >>"${GITHUB_PATH}"
+
+      - name: Lint (shellcheck, yamllint, actionlint, desktop-file-validate, xmllint)
+        run: scripts/lint.sh
+
+  arch-packages:
+    name: Paquetes de Arch y PKGBUILD
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: archlinux:latest
+    steps:
+      - name: Herramientas
+        run: pacman -Syu --noconfirm --needed base-devel git namcap
+
+      - uses: actions/checkout@v4
+
+      - name: Resolver la lista de la ISO contra los repositorios
+        run: |
+          sed -e 's/#.*//' iso/archlinux/packages.x86_64 | xargs pacman -Sp --print-format '%n %s' >/tmp/iso.txt
+          awk '{ n++; s += $2 } END { printf "%d paquetes con dependencias, %.0f MiB de descarga\n", n, s / 1048576 }' /tmp/iso.txt \
+            | tee -a "${GITHUB_STEP_SUMMARY}"
+
+      - name: Resolver los paquetes que pide el instalador
+        run: |
+          # Perfil Desktop > Xfce4 de archinstall más la lista propia.
+          { echo xfce4 xfce4-goodies pavucontrol gvfs xarchiver lightdm lightdm-gtk-greeter
+            sed -e 's/#.*//' iso/archlinux/airootfs/usr/local/share/gmini/arch/install-packages.txt
+          } | xargs pacman -Sp --print-format '%n' >/dev/null
+
+      - name: PKGBUILD (namcap y .SRCINFO)
+        run: |
+          useradd --create-home builder
+          cp -r aur /tmp/aur && chown -R builder: /tmp/aur
+          runuser -u builder -- bash -c 'cd /tmp/aur && makepkg --printsrcinfo' | tee /tmp/SRCINFO
+          namcap /tmp/aur/PKGBUILD
+
+  debian-packages:
+    name: Paquetes de Debian
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    container: debian:trixie
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Simular la instalación de la lista de la ISO
+        run: |
+          sed -i 's/^Components: main$/Components: main contrib non-free non-free-firmware/' \
+            /etc/apt/sources.list.d/debian.sources
+          apt-get update -q
+          sed -e 's/#.*//' iso/debian/config/package-lists/*.list.chroot \
+            | xargs apt-get install --simulate --no-install-recommends -y linux-image-amd64 >/tmp/sim.txt
+          echo "$(grep -c '^Inst ' /tmp/sim.txt) paquetes con dependencias" | tee -a "${GITHUB_STEP_SUMMARY}"

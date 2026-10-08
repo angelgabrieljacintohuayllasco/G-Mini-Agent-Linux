@@ -1,0 +1,299 @@
+name: release
+
+# Construye las dos ISO de G-Mini OS y el paquete de Arch a partir de una
+# release del repo principal, las prueba con QEMU y, con una etiqueta v*,
+# publica todo en una release con SHA256SUMS.
+#
+# Versión de G-Mini Agent: la entrada gmini_version, si no la variable del
+# repositorio GMINI_VERSION, y si no la última release del repo principal.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      gmini_version:
+        description: "Versión de G-Mini Agent (vacío: última release del repo principal)"
+        required: false
+        default: ""
+      smoke_test:
+        description: "Probar el arranque de las ISO con QEMU"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  GMINI_UPSTREAM_REPO: angelgabrieljacintohuayllasco/G-Mini-Agent
+  # live-build de Debian 13 (Ubuntu solo trae la variante antigua 3.0~a57).
+  LIVE_BUILD_DEB: live-build_20250505+deb13u1_all.deb
+  LIVE_BUILD_SHA256: 58e09779881cbcc631c49ceb703413e0247a87db01823e597b2a1c40a2afd8f4
+  LIVE_BUILD_SNAPSHOT: https://snapshot.debian.org/file/4dd9682896f13d1824d3819773791c3595076436
+  # Llavero de Debian 13 para debootstrap: el de Ubuntu 24.04 (2023.4) no
+  # trae las claves de trixie. Se extrae y se pasa con --keyring; instalarlo
+  # reemplazaría el paquete de Ubuntu y debootstrap dejaría de encontrar su
+  # .gpg (el de Debian solo trae .pgp).
+  KEYRING_DEB: debian-archive-keyring_2025.1_all.deb
+  KEYRING_SHA256: 9ea7778e443144ca490668737a8ab22dd3e748bb99e805e22ec055abeb3c7fac
+  KEYRING_SNAPSHOT: https://snapshot.debian.org/file/d9ece07d6610a9ef3b3048c302d70daffbf8c4cc
+
+jobs:
+  prepare:
+    name: Versiones
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      gmini_version: ${{ steps.gmini.outputs.version }}
+      gmini_tag: ${{ steps.gmini.outputs.tag }}
+      os_version: ${{ steps.os.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Versión de G-Mini OS
+        id: os
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == tag ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="dev-$(date -u +%Y%m%d)-${GITHUB_SHA::7}"
+          fi
+          echo "version=${version}" >>"${GITHUB_OUTPUT}"
+          echo "G-Mini OS ${version}" >>"${GITHUB_STEP_SUMMARY}"
+
+      - name: Versión de G-Mini Agent y paquetes disponibles
+        id: gmini
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REQUESTED: ${{ inputs.gmini_version || vars.GMINI_VERSION || 'latest' }}
+        run: |
+          scripts/fetch-gmini.sh --version "${REQUESTED}" --assets 'appimage,deb?' --out out/gmini
+          source out/gmini/gmini-release.env
+          echo "G-Mini Agent ${GMINI_VERSION} (${GMINI_TAG}), .deb: ${GMINI_DEB:-no publicado}" >>"${GITHUB_STEP_SUMMARY}"
+
+  aur:
+    name: Paquete de Arch (g-mini-agent-bin)
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container: archlinux:latest
+    steps:
+      - name: Herramientas
+        run: pacman -Syu --noconfirm --needed base-devel git jq squashfs-tools namcap
+
+      - uses: actions/checkout@v4
+
+      - name: Descargar el AppImage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/fetch-gmini.sh --version "${{ needs.prepare.outputs.gmini_version }}" --assets appimage --out out/gmini
+
+      - name: Construir el paquete
+        run: |
+          source out/gmini/gmini-release.env
+          scripts/build-aur-package.sh --version "${GMINI_VERSION}" --appimage "${GMINI_APPIMAGE}" \
+            --sha256 "${GMINI_APPIMAGE_SHA256}" --out out/aur --build
+          tar -czf out/aur/g-mini-agent-bin-aur.tar.gz -C out/aur PKGBUILD .SRCINFO g-mini-agent-bin.install
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aur
+          path: |
+            out/aur/PKGBUILD
+            out/aur/.SRCINFO
+            out/aur/g-mini-agent-bin.install
+            out/aur/g-mini-agent-bin-aur.tar.gz
+            out/aur/*.pkg.tar.zst
+          include-hidden-files: true
+          if-no-files-found: error
+
+  iso-arch:
+    name: ISO Arch Linux
+    needs: [prepare, aur]
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Liberar espacio en el runner
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: aur
+          path: out/aur
+
+      - name: Construir la ISO (archiso en un contenedor archlinux privilegiado)
+        env:
+          OS_VERSION: ${{ needs.prepare.outputs.os_version }}
+        run: |
+          docker run --rm --privileged \
+            -v "${PWD}:/src" -w /src -e OS_VERSION \
+            archlinux:latest bash -euo pipefail -c '
+              pacman -Syu --noconfirm --needed archiso grub rsync
+              scripts/build-iso-arch.sh --package out/aur/g-mini-agent-bin-*.pkg.tar.zst \
+                --pkgbuild out/aur --version "${OS_VERSION}" --out out/iso --work /tmp/gmini-archiso
+            '
+          ls -l out/iso
+
+      - name: Herramientas de prueba (QEMU, OVMF)
+        if: github.event_name != 'workflow_dispatch' || inputs.smoke_test
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends qemu-system-x86 ovmf libarchive-tools
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm || true
+
+      - name: Prueba de arranque (BIOS, UEFI y kernel hasta el login)
+        if: github.event_name != 'workflow_dispatch' || inputs.smoke_test
+        run: scripts/smoke-boot.sh --iso out/iso/g-mini-os-arch-*.iso --log-dir out/smoke
+
+      - uses: actions/upload-artifact@v4
+        if: always() && (github.event_name != 'workflow_dispatch' || inputs.smoke_test)
+        with:
+          name: smoke-arch
+          path: out/smoke
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iso-arch
+          path: out/iso/g-mini-os-arch-*.iso
+          compression-level: 0
+          if-no-files-found: error
+
+  iso-debian:
+    name: ISO Debian
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Liberar espacio en el runner
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Instalar el live-build de Debian y descargar su llavero
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends debootstrap rsync jq
+          fetch() {  # fetch ARCHIVO RUTA_EN_EL_POOL SHA256 RESPALDO_SNAPSHOT
+            curl -fsSLo "/tmp/$1" "https://deb.debian.org/debian/pool/main/$2/$1" || curl -fsSLo "/tmp/$1" "$4"
+            echo "$3  /tmp/$1" | sha256sum -c -
+          }
+          fetch "${KEYRING_DEB}" d/debian-archive-keyring "${KEYRING_SHA256}" "${KEYRING_SNAPSHOT}"
+          fetch "${LIVE_BUILD_DEB}" l/live-build "${LIVE_BUILD_SHA256}" "${LIVE_BUILD_SNAPSHOT}"
+          dpkg-deb -x "/tmp/${KEYRING_DEB}" /tmp/debian-keyring
+          sudo apt-get install -y -q "/tmp/${LIVE_BUILD_DEB}"
+          lb --version
+
+      - name: Descargar el .deb de G-Mini Agent
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: scripts/fetch-gmini.sh --version "${{ needs.prepare.outputs.gmini_version }}" --assets deb --out out/gmini
+
+      - name: Construir la ISO (live-build)
+        env:
+          OS_VERSION: ${{ needs.prepare.outputs.os_version }}
+        run: |
+          source out/gmini/gmini-release.env
+          sudo --preserve-env=GITHUB_OUTPUT scripts/build-iso-debian.sh --deb "${GMINI_DEB}" \
+            --version "${OS_VERSION}" --out out/iso --work /tmp/gmini-live-build
+          ls -l out/iso
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: live-build-log
+          path: /tmp/gmini-live-build/build.log
+          if-no-files-found: ignore
+
+      - name: Herramientas de prueba (QEMU, OVMF)
+        if: github.event_name != 'workflow_dispatch' || inputs.smoke_test
+        run: |
+          sudo apt-get install -y -q --no-install-recommends qemu-system-x86 ovmf libarchive-tools
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm || true
+
+      - name: Prueba de arranque (BIOS, UEFI y kernel hasta el login)
+        if: github.event_name != 'workflow_dispatch' || inputs.smoke_test
+        run: scripts/smoke-boot.sh --iso out/iso/g-mini-os-debian-*.iso --log-dir out/smoke
+
+      - uses: actions/upload-artifact@v4
+        if: always() && (github.event_name != 'workflow_dispatch' || inputs.smoke_test)
+        with:
+          name: smoke-debian
+          path: out/smoke
+          if-no-files-found: ignore
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iso-debian
+          path: out/iso/g-mini-os-debian-*.iso
+          compression-level: 0
+          if-no-files-found: error
+
+  publish:
+    name: Publicar la release
+    needs: [prepare, aur, iso-arch, iso-debian]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Reunir los archivos y comprobar tamaños
+        env:
+          GMINI_VERSION: ${{ needs.prepare.outputs.gmini_version }}
+          GMINI_TAG: ${{ needs.prepare.outputs.gmini_tag }}
+          OS_VERSION: ${{ needs.prepare.outputs.os_version }}
+        run: |
+          mkdir -p dist
+          cp artifacts/iso-arch/*.iso artifacts/iso-debian/*.iso dist/
+          cp artifacts/aur/*.pkg.tar.zst artifacts/aur/PKGBUILD artifacts/aur/g-mini-agent-bin-aur.tar.gz dist/
+          limit=$((2 * 1024 * 1024 * 1024))
+          for file in dist/*; do
+            size=$(stat -c %s "${file}")
+            printf '%s\t%s\n' "$(numfmt --to=iec-i --suffix=B "${size}")" "$(basename "${file}")"
+            if ((size >= limit)); then
+              echo "::error::$(basename "${file}") supera los 2 GiB por archivo de GitHub"
+              exit 1
+            fi
+          done
+          scripts/checksums.sh dist
+          {
+            echo "G-Mini OS ${OS_VERSION} con G-Mini Agent [${GMINI_VERSION}](https://github.com/${GMINI_UPSTREAM_REPO}/releases/tag/${GMINI_TAG})."
+            echo
+            echo "| Archivo | Tamaño |"
+            echo "|---|---|"
+            for file in dist/*; do
+              echo "| $(basename "${file}") | $(numfmt --to=iec-i --suffix=B "$(stat -c %s "${file}")") |"
+            done
+            echo
+            echo "Sesión live: usuario \`gmini\`, contraseña \`gmini\`. La primera vez G-Mini Agent descarga sus componentes (unos 1,5 GB): hace falta internet."
+            echo
+            echo "Verificación: \`sha256sum -c SHA256SUMS --ignore-missing\`. Guía completa en el README."
+          } >release-notes.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: G-Mini OS ${{ needs.prepare.outputs.os_version }}
+          body_path: release-notes.md
+          files: dist/*
+          fail_on_unmatched_files: true

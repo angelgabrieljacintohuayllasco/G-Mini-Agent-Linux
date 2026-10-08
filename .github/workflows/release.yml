@@ -207,7 +207,8 @@ jobs:
         run: |
           source out/gmini/gmini-release.env
           sudo --preserve-env=GITHUB_OUTPUT scripts/build-iso-debian.sh --deb "${GMINI_DEB}" \
-            --version "${OS_VERSION}" --out out/iso --work /tmp/gmini-live-build
+            --version "${OS_VERSION}" --out out/iso --work /tmp/gmini-live-build \
+            --keyring /tmp/debian-keyring/usr/share/keyrings/debian-archive-keyring.pgp
           ls -l out/iso
 
       - uses: actions/upload-artifact@v4

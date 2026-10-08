@@ -112,6 +112,8 @@ wait_for() {
     return 1
 }
 
+# El CD lleva bootindex 1: con -kernel, QEMU reserva el 0 para su ROM
+# linuxboot y rechaza otro dispositivo con el mismo índice.
 start_qemu() {
     local log_file="$1"
     shift
@@ -120,7 +122,7 @@ start_qemu() {
         -display none -monitor none -no-reboot \
         -serial "file:${log_file}" \
         -drive "file=${ISO},media=cdrom,readonly=on,if=none,id=cd0" \
-        -device ide-cd,drive=cd0,bootindex=0 \
+        -device ide-cd,drive=cd0,bootindex=1 \
         "$@" &
     QEMU_PID=$!
 }

@@ -1,0 +1,28 @@
+# Scriptlet de pacman para g-mini-agent-bin.
+
+_sandbox='/opt/G-Mini Agent/chrome-sandbox'
+
+# Igual que el .deb oficial: el helper SUID de Chromium solo hace falta si el
+# kernel no deja crear namespaces de usuario sin privilegios.
+_set_sandbox_mode() {
+    if [ -L /proc/self/ns/user ] && unshare --user true 2>/dev/null; then
+        chmod 0755 "${_sandbox}"
+    else
+        chmod 4755 "${_sandbox}"
+    fi
+}
+
+post_install() {
+    _set_sandbox_mode
+    cat <<'EOF'
+==> G-Mini Agent: la primera vez que se abre descarga su propio Python 3.13 y
+    sus componentes (unos 1,5 GB) en ~/.local/share/g-mini-agent. Necesita
+    conexión a internet.
+==> Las API keys se guardan en el llavero del sistema (Secret Service):
+    instala gnome-keyring, o usa KWallet en KDE Plasma.
+EOF
+}
+
+post_upgrade() {
+    _set_sandbox_mode
+}

@@ -1,0 +1,129 @@
+# Maintainer: G-Mini Agent <angelgabrieljacintohuayllasco@gmail.com>
+#
+# Reempaqueta el AppImage oficial de cada release en /opt/G-Mini Agent, la
+# misma ruta que usan el .deb y el .rpm oficiales. La app trae su núcleo y uv;
+# la primera vez que se abre prepara su propio Python 3.13 en
+# ~/.local/share/g-mini-agent (necesita internet).
+#
+# scripts/build-aur-package.sh actualiza pkgver, pkgrel y el sha256 al
+# construir una release.
+
+pkgname=g-mini-agent-bin
+_exe=gmini-agent-ui
+_appdir='G-Mini Agent'
+pkgver=0.3.1
+pkgrel=1
+pkgdesc='Desktop AI agent that sees the screen and drives mouse, keyboard and browser (official build)'
+arch=('x86_64')
+url='https://github.com/angelgabrieljacintohuayllasco/G-Mini-Agent'
+license=('MIT')
+depends=(
+    'alsa-lib'
+    'at-spi2-core'
+    'cairo'
+    'dbus'
+    'expat'
+    'gcc-libs'
+    'glib2'
+    'glibc'
+    'gtk3'
+    'libcups'
+    'libdrm'
+    'libx11'
+    'libxcb'
+    'libxcomposite'
+    'libxdamage'
+    'libxext'
+    'libxfixes'
+    'libxkbcommon'
+    'libxrandr'
+    'mesa'
+    'nspr'
+    'nss'
+    'pango'
+    'xdg-utils'
+    # El primer arranque compila evdev (dependencia de pynput en Linux, solo
+    # se publica como código fuente).
+    'gcc'
+)
+makedepends=('squashfs-tools')
+optdepends=(
+    'gnome-keyring: store API keys in the Secret Service keyring'
+    'kwallet: Secret Service keyring on KDE Plasma'
+    'tesseract: on-screen OCR'
+    'tesseract-data-spa: OCR for Spanish text'
+    'tesseract-data-eng: OCR for English text'
+    'pipewire-pulse: microphone and audio for voice mode'
+    'ollama: local AI models'
+)
+provides=('g-mini-agent')
+conflicts=('g-mini-agent')
+options=('!strip' '!debug')
+install="${pkgname}.install"
+_appimage="G-Mini-Agent-${pkgver}.AppImage"
+source_x86_64=("${_appimage}::${url}/releases/download/v${pkgver}/${_appimage}")
+noextract=("${_appimage}")
+sha256sums_x86_64=('dd8eb518255f802f2830e49f445e68ea4fd85284b6c25a650e7ade6f81d9d6db')
+
+# Un AppImage es un runtime ELF seguido de una imagen squashfs. La imagen
+# empieza donde termina la tabla de secciones del ELF (el mismo cálculo que
+# hace appimagetool), así que se extrae sin ejecutar el binario descargado.
+_squashfs_offset() {
+    local shoff shentsize shnum offset
+    shoff=$(od -An -t u8 -j 40 -N 8 "$1" | tr -d ' ')
+    shentsize=$(od -An -t u2 -j 58 -N 2 "$1" | tr -d ' ')
+    shnum=$(od -An -t u2 -j 60 -N 2 "$1" | tr -d ' ')
+    offset=$((shoff + shentsize * shnum))
+    if [[ "$(head -c "$((offset + 4))" "$1" | tail -c 4)" != hsqs ]]; then
+        error "No squashfs image found at offset ${offset} in $1"
+        return 1
+    fi
+    printf '%s\n' "${offset}"
+}
+
+prepare() {
+    local offset
+    offset=$(_squashfs_offset "${srcdir}/${_appimage}")
+    rm -rf "${srcdir}/squashfs-root"
+    unsquashfs -q -n -d "${srcdir}/squashfs-root" -o "${offset}" "${srcdir}/${_appimage}"
+}
+
+package() {
+    local root="${srcdir}/squashfs-root"
+    local app="${pkgdir}/opt/${_appdir}"
+    local icon size
+
+    install -d "${app}"
+    cp -a --no-preserve=ownership "${root}/." "${app}/"
+    # Integración propia del AppImage y librerías que trae para distros
+    # antiguas: en Arch las aporta el sistema.
+    rm -rf "${app}/AppRun" "${app}/.DirIcon" "${app}/${_exe}.desktop" "${app}/${_exe}.png" "${app:?}/usr"
+    # El modo definitivo (0755 o 4755) lo decide el scriptlet de instalación.
+    chmod 0755 "${app}/chrome-sandbox"
+
+    install -d "${pkgdir}/usr/bin"
+    ln -s "/opt/${_appdir}/${_exe}" "${pkgdir}/usr/bin/${_exe}"
+
+    sed -e "s|^Exec=AppRun --no-sandbox|Exec=${_exe}|" \
+        -e "s|^Exec=AppRun|Exec=${_exe}|" \
+        -e '/^X-AppImage-/d' \
+        "${root}/${_exe}.desktop" >"${srcdir}/${_exe}.desktop"
+    install -Dm644 "${srcdir}/${_exe}.desktop" "${pkgdir}/usr/share/applications/${_exe}.desktop"
+
+    # Los tamaños estándar van a hicolor; un tamaño libre (el AppImage de
+    # 0.3.0 trae un PNG de 551 px en hicolor/0x0) va a pixmaps.
+    for icon in "${root}"/usr/share/icons/hicolor/*/apps/"${_exe}".png; do
+        [[ -e "${icon}" ]] || continue
+        size=$(basename "$(dirname "$(dirname "${icon}")")")
+        case "${size}" in
+            16x16 | 22x22 | 24x24 | 32x32 | 48x48 | 64x64 | 96x96 | 128x128 | 192x192 | 256x256 | 512x512)
+                install -Dm644 "${icon}" "${pkgdir}/usr/share/icons/hicolor/${size}/apps/${_exe}.png"
+                ;;
+            *)
+                install -Dm644 "${icon}" "${pkgdir}/usr/share/pixmaps/${_exe}.png"
+                ;;
+        esac
+    done
+
+    install -Dm644 "${app}/resources/core/LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}

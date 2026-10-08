@@ -76,7 +76,7 @@ else
 fi
 
 # Etiqueta de volumen ISO 9660 (descriptor primario, 32 bytes en 32808).
-LABEL="$(dd if="${ISO}" bs=1 skip=32808 count=32 status=none | tr -d ' \0')"
+LABEL="$(dd if="${ISO}" bs=1 skip=32808 count=32 status=none | tr -d '\0' | sed 's/[[:space:]]*$//')"
 if bsdtar -tf "${ISO}" arch/boot/x86_64/vmlinuz-linux >/dev/null 2>&1; then
     FLAVOR=arch
     KERNEL_PATH=arch/boot/x86_64/vmlinuz-linux

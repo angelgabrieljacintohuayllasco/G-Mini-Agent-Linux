@@ -183,11 +183,14 @@ test_uefi() {
 test_kernel() {
     local log_file="${LOG_DIR}/${FLAVOR}-kernel.log" start step
     bsdtar -xf "${ISO}" -C "${TMP}" "${KERNEL_PATH}" "${INITRD_PATH}"
-    log "Kernel: ${CMDLINE} console=ttyS0,115200 systemd.unit=multi-user.target"
+    # loglevel=6: con su nivel de consola por defecto, el kernel de Arch no
+    # imprime el banner "Linux version" (KERN_NOTICE) que la prueba espera primero.
+    local append="${CMDLINE} console=ttyS0,115200 loglevel=6 systemd.unit=multi-user.target"
+    log "Kernel: ${append}"
     start="${SECONDS}"
     start_qemu "${log_file}" \
         -kernel "${TMP}/${KERNEL_PATH}" -initrd "${TMP}/${INITRD_PATH}" \
-        -append "${CMDLINE} console=ttyS0,115200 systemd.unit=multi-user.target"
+        -append "${append}"
 
     # live-config de Debian puede entrar solo en la consola serie: vale el
     # login o el prompt del usuario.

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+  <title>G-Mini OS: fondo del menú de arranque (GRUB)</title>
+  <!-- El tema de GRUB recorta al centro ("crop"): todo lo importante queda
+       dentro de la franja central 4:3 (x de 240 a 1680). -->
+  <defs>
+    <radialGradient id="bg" cx="960" cy="300" r="1100" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#16244a"/>
+      <stop offset="0.5" stop-color="#0e1830"/>
+      <stop offset="1" stop-color="#0b1220"/>
+    </radialGradient>
+    <linearGradient id="ring" x1="44" y1="36" x2="214" y2="226" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#86a4ff"/>
+      <stop offset="0.5" stop-color="#4d7cff"/>
+      <stop offset="1" stop-color="#2f4fd1"/>
+    </linearGradient>
+    <radialGradient id="core" cx="128" cy="128" r="24" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.6" stop-color="#d6e1ff"/>
+      <stop offset="1" stop-color="#6f95ff"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="128" cy="128" r="46" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4d7cff" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#4d7cff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <line x1="660" y1="404" x2="1260" y2="404" stroke="#4d7cff" stroke-opacity="0.35" stroke-width="2"/>
+  <g transform="translate(888 132) scale(0.5625)">
+    <path d="M 90 206 L 40 238 L 52 170 Z" fill="url(#ring)"/>
+    <path d="M 184.6 71.4 A 80 80 0 1 0 208 128 L 174 128" fill="none" stroke="url(#ring)" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="128" cy="128" r="46" fill="url(#glow)"/>
+    <circle cx="128" cy="128" r="21" fill="url(#core)"/>
+  </g>
+  <text x="960" y="352" text-anchor="middle" font-family="Noto Sans, DejaVu Sans, sans-serif" font-size="44" font-weight="600" fill="#e6ebff" letter-spacing="1">G-Mini OS</text>
+</svg>

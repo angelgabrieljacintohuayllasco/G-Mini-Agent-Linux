@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <title>G-Mini OS</title>
+  <defs>
+    <linearGradient id="ring" x1="44" y1="36" x2="214" y2="226" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#86a4ff"/>
+      <stop offset="0.5" stop-color="#4d7cff"/>
+      <stop offset="1" stop-color="#2f4fd1"/>
+    </linearGradient>
+    <radialGradient id="core" cx="128" cy="128" r="24" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.6" stop-color="#d6e1ff"/>
+      <stop offset="1" stop-color="#6f95ff"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="128" cy="128" r="46" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4d7cff" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#4d7cff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <!-- Cola del globo de diálogo -->
+  <path d="M 90 206 L 40 238 L 52 170 Z" fill="url(#ring)"/>
+  <!-- La "G": arco de 315 grados que termina en la barra central -->
+  <path d="M 184.6 71.4 A 80 80 0 1 0 208 128 L 174 128" fill="none" stroke="url(#ring)" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Núcleo -->
+  <circle cx="128" cy="128" r="46" fill="url(#glow)"/>
+  <circle cx="128" cy="128" r="21" fill="url(#core)"/>
+</svg>
